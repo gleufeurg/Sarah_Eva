@@ -1,18 +1,19 @@
 using System;
 using System.Collections.Generic;
+using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 using UnityEngine.VFX;
 
 public class ElectricArc : MonoBehaviour
 {
     public float range = 10;
-    public Vector3 spawnPos = new Vector3(1, 0, 0);
+    public Vector3 spawnOffset = new Vector3(1, 0, 0);
 
     public LayerMask enemyMask;
     public KeyCode input;
     public GameObject electricArc;
 
-    List<GameObject> instances = new List<GameObject>();
+    List<GameObject> electricArcs = new List<GameObject>();
     List<GameObject> hittedEnemies = new List<GameObject>();
 
     struct enemy
@@ -25,95 +26,82 @@ public class ElectricArc : MonoBehaviour
     {
         if (Input.GetKeyDown(input))
         {
-            Fire(transform, range);
+            Fire();
         }
         
         if (Input.GetKeyUp(input))
         {
-                StopFire();
+                //StopFire();
         }
     }
 
     private void StopFire()
     {
-        foreach (GameObject instance in instances)
+        foreach (GameObject electricArc in electricArcs)
         {
-            Destroy(instance);
-            hittedEnemies.Clear();
+            Destroy(electricArc);
         }
+            hittedEnemies.Clear();
+            electricArcs.Clear();
     }
 
-    private void Fire(Transform fireTransform, float range_)
+    private void Fire()
     {
-        if(!AnyEnemyInRange(range_).exist)
+        //GameObject arc = GameObject.Instantiate(electricArc, transform.position, Quaternion.identity);
+
+        GameObject target = GetNearestEnemy(transform.position);
+
+        if (target == null)
             return;
 
+        GameObject arc = GameObject.Instantiate(electricArc, transform.position, Quaternion.identity);
 
-        GameObject electricArc_ = GameObject.Instantiate(electricArc);
-        instances.Add(electricArc_);
+        //arc.transform.position = arc.transform.position - arc.transform.position/2;
+        arc.transform.Find("Pos4").transform.position = target.transform.position;
 
-        electricArc_.transform.rotation = fireTransform.rotation;
-        electricArc_.transform.position = fireTransform.position + spawnPos;
-
-        electricArc_.transform.Find("Pos4").transform.position = GetNearestEnemyInRange(range_).position;
-        Fire(GetNearestEnemyInRange(range_), range_);
+        hittedEnemies.Add(target);
+        electricArcs.Add(arc);
+        arc.transform.Find("VFXG_ElectricArc").GetComponent<VisualEffect>().Play();
     }
 
-    private Transform GetNearestEnemyInRange(float range)
+    private GameObject GetNearestEnemy(Vector3 position)
     {
-        GameObject nearestEnemy = new GameObject();
-        Vector3 nearestEnemyPosition = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
+        GameObject nearestEnemy = null;
+        float distance = float.MaxValue;
+        Collider[] enemies = Physics.OverlapSphere(position, range, enemyMask);
 
-        Collider[] enemies = Physics.OverlapSphere(transform.position, range, enemyMask);
+        if(enemies.Length == 0 )
+        { return null; }
 
         foreach (Collider enemy in enemies)
         {
-            foreach (GameObject hittedEnemy in hittedEnemies)
+            if(hittedEnemies.Count > 0)
             {
-                if (hittedEnemy != nearestEnemy)
+               foreach(GameObject hittedEnemy in hittedEnemies)
+               {
+                   if (hittedEnemy == enemy)
+                       continue;
+
+                   float distFromEnemy = Vector3.Distance(position, enemy.transform.position);
+                   if (distFromEnemy < distance)
+                   {
+                       distance = distFromEnemy;
+                       nearestEnemy = enemy.gameObject;
+                   }
+               }
+            }
+            else
+            {
+                float distFromEnemy = Vector3.Distance(position, enemy.transform.position);
+                if (distFromEnemy < distance)
                 {
-                    hittedEnemies.Add(enemy.gameObject);
-
-                    Vector3 enemyPosition = enemy.transform.position;
-
-                    if (Vector3.Distance(enemyPosition, transform.position) < Vector3.Distance(transform.position, nearestEnemyPosition))
-                        nearestEnemy = enemy.gameObject;
+                    distance = distFromEnemy;
+                    nearestEnemy = enemy.gameObject;
                 }
             }
 
         }
-
-        return nearestEnemy.transform;
-    }
-    private enemy AnyEnemyInRange(float range)
-    {
-        enemy enemy_ = new enemy();
-        enemy_.exist = false;
-        enemy_.enemyObject = null;
-
-        Collider[] enemies = Physics.OverlapSphere(transform.position, range, enemyMask);
-
-        if (enemies.Length == 0)
-        {
-            enemy_.exist = false;
-            return enemy_;
-        }
-
-        foreach (Collider enemy in enemies)
-        {
-            foreach(GameObject hittedEnemy in hittedEnemies)
-            {
-                if (enemy.gameObject != hittedEnemy)
-                {
-                    enemy_.exist = true;
-                    enemy_.enemyObject = enemy.gameObject;
-                    return enemy_;
-                }
-            }
-        }
-
-        print(enemy_);
-        return enemy_;
+        return nearestEnemy;
     }
 
     private void OnDrawGizmos()
